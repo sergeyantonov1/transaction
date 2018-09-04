@@ -19,9 +19,15 @@ class MakePayment
   delegate :user_from, :user_to, :amount, to: :context
 
   def call
-    context.fail! if user_from.balance < amount
+    ActiveRecord::Base.transaction do
+      user_from.update!(balance: user_from.balance - amount)
+      user_to.update!(balance: user_to.balance + amount)
 
-    make_payment
+      create_transaction
+    end
+
+  rescue ActiveRecord::RecordInvalid => e
+    context.fail!(error: e.message)
   end
 
   private
@@ -32,15 +38,6 @@ class MakePayment
       user_to: user_to,
       amount: amount
     )
-  end
-
-  def make_payment
-    ActiveRecord::Base.transaction do
-      user_from.update!(balance: user_from.balance - amount)
-      user_to.update!(balance: user_to.balance + amount)
-
-      create_transaction
-    end
   end
 end
 ```
@@ -64,16 +61,17 @@ describe MakePayment do
       )
     end
 
-    context "when the sender's balance is less than zero" do
-      let(:user_from) { create :user, balance: -1 }
+    context "when the sender's balance is zero" do
+      let(:user_from) { create :user, balance: 0 }
 
       it "doesn't create a transaction" do
         expect { result }.to change(Transaction, :count).by(0)
       end
 
       it "doesn't update user balance" do
-        expect(result.user_from.balance).to eq(-1)
-        expect(result.user_to.balance).to eq(0)
+        expect(result.user_from.reload.balance).to eq(0)
+        expect(result.user_to.reload.balance).to eq(0)
+        expect(result.error).to eq("Validation failed: Balance must be greater than or equal to 0.0")
       end
     end
 
