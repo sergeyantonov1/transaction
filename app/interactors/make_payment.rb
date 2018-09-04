@@ -4,9 +4,15 @@ class MakePayment
   delegate :user_from, :user_to, :amount, to: :context
 
   def call
-    context.fail! if user_from.balance < amount
+    ActiveRecord::Base.transaction do
+      user_from.update!(balance: user_from.balance - amount)
+      user_to.update!(balance: user_to.balance + amount)
 
-    make_payment
+      create_transaction
+    end
+
+  rescue ActiveRecord::RecordInvalid => e
+    context.fail!(error: e.message)
   end
 
   private
@@ -17,14 +23,5 @@ class MakePayment
       user_to: user_to,
       amount: amount
     )
-  end
-
-  def make_payment
-    ActiveRecord::Base.transaction do
-      user_from.update!(balance: user_from.balance - amount)
-      user_to.update!(balance: user_to.balance + amount)
-
-      create_transaction
-    end
   end
 end

@@ -13,16 +13,17 @@ describe MakePayment do
       )
     end
 
-    context "when the sender's balance is less than zero" do
-      let(:user_from) { create :user, balance: -1 }
+    context "when the sender's balance is zero" do
+      let(:user_from) { create :user, balance: 0 }
 
       it "doesn't create a transaction" do
         expect { result }.to change(Transaction, :count).by(0)
       end
 
       it "doesn't update user balance" do
-        expect(result.user_from.balance).to eq(-1)
-        expect(result.user_to.balance).to eq(0)
+        expect(result.user_from.reload.balance).to eq(0)
+        expect(result.user_to.reload.balance).to eq(0)
+        expect(result.error).to eq("Validation failed: Balance must be greater than or equal to 0.0")
       end
     end
 
